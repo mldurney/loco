@@ -1,29 +1,44 @@
 #include "matrix.hpp"
 
-Matrix::Matrix(uint r, uint c, double sparsity) : numRows(r), numCols(c) {
+Matrix::Matrix(uint m, uint n, double p) : numRows(m), numCols(n) {
     uint cells = numRows * numCols;
-    uint nonzero = (uint)cells * sparsity;
 
-    std::vector<uint> indices(cells);
-    std::iota(indices.begin(), indices.end(), 0);
-    std::random_shuffle(indices.begin(), indices.end());
+    rows = dvector2(numRows, dvector(numCols, 0));
+    cols = dvector2(numCols, dvector(numRows, 0));
+    data = dvector(cells, 0);
+    occupied = bvector(cells, false);
 
-    data = std::vector<int>(cells);
-    rows = std::vector<std::vector<int>>(numRows, std::vector<int>(numCols));
-    cols = std::vector<std::vector<int>>(numCols, std::vector<int>(numRows));
+    srand(time(NULL));
+    for (uint row = 0; row < numRows; ++row) {
+        uint ind = toInd(row, rand() % numCols);
+        occupied[ind] = true;
+    }
+    for (uint col = 0; col < numCols; ++col) {
+        uint ind = toInd(rand() % numRows, col);
+        occupied[ind] = true;
+    }
+    for (uint i = 0; i < cells; ++i) {
+        if (!occupied[i]) {
+            occupied[i] = ((double)rand() / RAND_MAX) < p;
+        }
+    }
 
-    for (uint i = 0; i < nonzero; ++i) {
-        uint ind = indices[i];
-        uint row = toRow(ind);
-        uint col = toCol(ind);
-        rows[row][col] = 1;
-        cols[col][row] = 1;
-        data[ind] = 1;
+    for (uint i = 0; i < cells; ++i) {
+        if (occupied[i]) {
+            do {
+                data[i] = (double)rand() / RAND_MAX;
+            } while (data[i] <= EPSILON);
+
+            uint row = toRow(i);
+            uint col = toCol(i);
+            rows[row][col] = data[i];
+            cols[col][row] = data[i];
+        }
     }
 }
 
-Matrix::Matrix(uint r, uint c, std::vector<int> nums)
-    : numRows(r), numCols(c), data(nums) {
+Matrix::Matrix(uint m, uint n, const dvector& nums)
+    : numRows(m), numCols(n), data(nums) {
     uint cells = numRows * numCols;
     if (nums.size() != cells) {
         std::cout << "Constructor ERROR: nums vector wrong size" << std::endl
@@ -31,65 +46,86 @@ Matrix::Matrix(uint r, uint c, std::vector<int> nums)
         exit(EXIT_FAILURE);
     }
 
-    rows = std::vector<std::vector<int>>(numRows, std::vector<int>(numCols));
-    cols = std::vector<std::vector<int>>(numCols, std::vector<int>(numRows));
+    rows = dvector2(numRows, dvector(numCols, 0));
+    cols = dvector2(numCols, dvector(numRows, 0));
+    data = dvector(cells, 0);
+    occupied = bvector(cells, false);
 
     for (uint i = 0; i < cells; ++i) {
-        uint row = toRow(i);
-        uint col = toCol(i);
-        rows[row][col] = data[i];
-        cols[col][row] = data[i];
+        if (fabs(nums[i]) > EPSILON) {  // Account for floating-point error
+            uint row = toRow(i);
+            uint col = toCol(i);
+            rows[row][col] = nums[i];
+            cols[col][row] = nums[i];
+            data[i] = nums[i];
+            occupied[i] = true;
+        }
     }
 }
 
-Matrix Matrix::getSubmatrix(std::vector<uint> rows,
-                            std::vector<uint> cols) const {
+Matrix Matrix::getSubmatrix(uivector rows, uivector cols) const {
     checkRows(rows);
     checkCols(cols);
 
-    uint r = rows.size();
-    uint c = cols.size();
-    std::vector<int> nums(r * c);
+    uint n = rows.size();
+    uint m = cols.size();
+    dvector nums(m * n);
 
-    for (int i = 0; i < r; ++i) {
-        for (int j = 0; j < c; ++j) {
-            nums[i * c + j] = getCell(i, j);
+    for (uint i = 0; i < n; ++i) {
+        for (uint j = 0; j < m; ++j) {
+            nums[i * n + j] = getCell(rows[i], cols[j]);
         }
     }
 
-    return Matrix(r, c, nums);
+    return Matrix(m, n, nums);
 }
 
 void Matrix::print() const {
     for (const auto& row : rows) {
         for (const auto& val : row) {
-            printf("%3d", val);
+            printf("%.3f ", val);
         }
         std::cout << std::endl;
     }
     std::cout << std::endl;
 }
 
-void Matrix::setCell(uint ind, int num) {
+void Matrix::printOccupancy() const {
+    for (uint row = 0; row < numRows; ++row) {
+        for (uint col = 0; col < numCols; ++col) {
+            std::cout << (isOccupied(row, col) ? 1 : 0) << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+void Matrix::setCell(uint ind, double num) {
     checkInd(ind);
     uint row = toRow(ind);
     uint col = toCol(ind);
 
-    data[ind] = num;
-    rows[row][col] = num;
-    cols[col][row] = num;
+    if (num > EPSILON) {
+        data[ind] = num;
+        rows[row][col] = num;
+        cols[col][row] = num;
+        occupied[ind] = true;
+    } else {
+        data[ind] = 0;
+        rows[row][col] = 0;
+        cols[col][row] = 0;
+        occupied[ind] = false;
+    }
 }
 
-void Matrix::setCell(uint row, uint col, int num) {
+void Matrix::setCell(uint row, uint col, double num) {
     checkRow(row);
     checkCol(col);
-
-    data[toInd(row, col)] = num;
-    rows[row][col] = num;
-    cols[col][row] = num;
+    uint ind = toInd(row, col);
+    setCell(ind, num);
 }
 
-void Matrix::setRow(uint row, const std::vector<int>& nums) {
+void Matrix::setRow(uint row, const dvector& nums) {
     checkRow(row);
     if (nums.size() != getNumCols()) {
         std::cout << "setRow ERROR: nums vector wrong size" << std::endl
@@ -98,13 +134,11 @@ void Matrix::setRow(uint row, const std::vector<int>& nums) {
     }
 
     for (uint col = 0; col < getNumCols(); ++col) {
-        data[toInd(row, col)] = nums[col];
-        rows[row][col] = nums[col];
-        cols[col][row] = nums[col];
+        setCell(row, col, nums[col]);
     }
 }
 
-void Matrix::setCol(uint col, const std::vector<int>& nums) {
+void Matrix::setCol(uint col, const dvector& nums) {
     checkCol(col);
     if (nums.size() != getNumRows()) {
         std::cout << "setCol ERROR: nums vector wrong size" << std::endl
@@ -113,9 +147,7 @@ void Matrix::setCol(uint col, const std::vector<int>& nums) {
     }
 
     for (uint row = 0; row < getNumRows(); ++row) {
-        data[toInd(row, col)] = nums[col];
-        rows[row][col] = nums[col];
-        cols[col][row] = nums[col];
+        setCell(row, col, nums[row]);
     }
 }
 

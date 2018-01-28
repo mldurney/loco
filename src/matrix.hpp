@@ -3,47 +3,65 @@
 
 // Includes
 #include <algorithm>
+#include <cmath>
+#include <ctime>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <vector>
 
-// Typedefs
+// Typedefs and constants
 typedef unsigned int uint;
+typedef std::vector<uint> uivector;
+typedef std::vector<double> dvector;
+typedef std::vector<std::vector<double>> dvector2;
+typedef std::vector<bool> bvector;
+const double SPARSITY_BASE = 3;
+const double EPSILON = std::numeric_limits<double>::epsilon() * 3;
 
 class Matrix {
    public:
-    Matrix(uint r = 10, uint c = 10, double sparsity = 0.3);
-    Matrix(uint r, uint c, std::vector<int> nums);
+    Matrix() : Matrix(60, 50) {}
+    Matrix(uint n) : Matrix(n, n) {}
+    Matrix(uint m, uint n) : Matrix(m, n, SPARSITY_BASE / n) {}
+    Matrix(uint m, uint n, double p);
+    Matrix(uint m, uint n, const dvector &nums);
     ~Matrix() {}
 
     // Getters
-    uint getCell(uint ind) const { return data[checkInd(ind)]; }
-    uint getCell(uint row, uint col) const {
+    double getCell(uint ind) const { return data[checkInd(ind)]; }
+    double getCell(uint row, uint col) const {
         return rows[checkRow(row)][checkCol(col)];
     }
-    std::vector<int> getRow(uint row) const { return rows[checkRow(row)]; }
-    std::vector<int> getCol(uint col) const { return cols[checkCol(col)]; }
-    std::vector<std::vector<int>> getRows() const { return rows; }
-    std::vector<std::vector<int>> getCols() const { return cols; }
+    dvector getRow(uint row) const { return rows[checkRow(row)]; }
+    dvector getCol(uint col) const { return cols[checkCol(col)]; }
+    dvector2 getRows() const { return rows; }
+    dvector2 getCols() const { return cols; }
     uint getNumRows() const { return numRows; }
     uint getNumCols() const { return numCols; }
     uint getNumCells() const { return numRows * numCols; }
-    Matrix getSubmatrix(std::vector<uint> rows, std::vector<uint> cols) const;
+    Matrix getSubmatrix(uivector rows, uivector cols) const;
 
     // Setters
-    void setCell(uint ind, int num);
-    void setCell(uint row, uint col, int num);
-    void setRow(uint row, const std::vector<int> &nums);
-    void setCol(uint col, const std::vector<int> &nums);
+    void setCell(uint ind, double num);
+    void setCell(uint row, uint col, double num);
+    void setRow(uint row, const dvector &nums);
+    void setCol(uint col, const dvector &nums);
 
+    bool isOccupied(uint ind) const { return occupied[ind]; }
+    bool isOccupied(uint row, uint col) const {
+        return occupied[toInd(row, col)];
+    }
     void print() const;
+    void printOccupancy() const;
 
    private:
     uint numRows;
     uint numCols;
-    std::vector<std::vector<int>> rows;
-    std::vector<std::vector<int>> cols;
-    std::vector<int> data;
+    dvector2 rows;
+    dvector2 cols;
+    dvector data;
+    bvector occupied;
 
     // Convert 1D index to 2D row, column
     uint toRow(uint ind) const { return ind / numCols; }

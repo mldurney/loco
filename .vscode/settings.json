@@ -1,5 +1,7 @@
 {
     "files.associations": {
+        "*.ml": "ocaml",
+        "*.mli": "ocaml",
         "vector": "cpp",
         "algorithm": "cpp",
         "cmath": "cpp",
@@ -41,6 +43,8 @@
         "tuple": "cpp",
         "deque": "cpp",
         "stack": "cpp",
-        "array": "cpp"
+        "array": "cpp",
+        "iterator": "cpp",
+        "ctime": "cpp"
     }
 }
