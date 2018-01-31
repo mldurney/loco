@@ -26,7 +26,6 @@ class Matrix {
     Matrix(uint m, uint n) : Matrix(m, n, SPARSITY_BASE / n) {}
     Matrix(uint m, uint n, double p);
     Matrix(uint m, uint n, const dvector &nums);
-    ~Matrix() {}
 
     // Getters
     double getCell(uint ind) const { return data[checkInd(ind)]; }

@@ -37,8 +37,7 @@ Matrix::Matrix(uint m, uint n, double p) : numRows(m), numCols(n) {
     }
 }
 
-Matrix::Matrix(uint m, uint n, const dvector& nums)
-    : numRows(m), numCols(n), data(nums) {
+Matrix::Matrix(uint m, uint n, const dvector& nums) : numRows(m), numCols(n) {
     uint cells = numRows * numCols;
     if (nums.size() != cells) {
         std::cout << "Constructor ERROR: nums vector wrong size" << std::endl
@@ -77,7 +76,7 @@ Matrix Matrix::getSubmatrix(uivector rows, uivector cols) const {
         }
     }
 
-    return Matrix(m, n, nums);
+    return std::move(Matrix(m, n, nums));
 }
 
 void Matrix::print() const {
@@ -187,6 +186,6 @@ void Matrix::checkRows(std::vector<uint> rows) const {
 
 void Matrix::checkCols(std::vector<uint> cols) const {
     for (auto& col : cols) {
-        checkRow(col);
+        checkCol(col);
     }
 }
