@@ -1,191 +1,259 @@
 #include "matrix.hpp"
 
-Matrix::Matrix(uint m, uint n, double p) : numRows(m), numCols(n) {
-    uint cells = numRows * numCols;
+Matrix::Matrix(unsigned r, unsigned c, double p, double noise)
+    : rows(r), cols(c), cells(r * c) {
+    // Create uniform random real number generator for range [0, 1)
+    unsigned seed =
+        std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine gen(seed);
+    std::uniform_real_distribution<double> dist(0, 1);
 
-    rows = dvector2(numRows, dvector(numCols, 0));
-    cols = dvector2(numCols, dvector(numRows, 0));
-    data = dvector(cells, 0);
-    occupied = bvector(cells, false);
+    // Generate random order for filling rows and columns in matrix
+    uivector rowOrder(rows);
+    uivector colOrder(cols);
+    for (unsigned r = 0; r < rows; ++r) {
+        rowOrder[r] = r;
+    }
+    for (unsigned c = 0; c < cols; ++c) {
+        colOrder[c] = c;
+    }
+    std::shuffle(rowOrder.begin(), rowOrder.end(), gen);
+    std::shuffle(colOrder.begin(), colOrder.end(), gen);
 
-    srand(time(NULL));
-    for (uint row = 0; row < numRows; ++row) {
-        uint ind = toInd(row, rand() % numCols);
-        occupied[ind] = true;
-    }
-    for (uint col = 0; col < numCols; ++col) {
-        uint ind = toInd(rand() % numRows, col);
-        occupied[ind] = true;
-    }
-    for (uint i = 0; i < cells; ++i) {
-        if (!occupied[i]) {
-            occupied[i] = ((double)rand() / RAND_MAX) < p;
+    // Generate (row, col, value) triplets to insert into matrix
+    std::vector<T> triplets;  // Values to insert into matrix
+
+    // Cycle through rows, columns in random order so each has >= 1 nonzero
+    if (rows >= cols) {
+        for (unsigned r = 0, c = 0; r < rows; ++r, ++c) {
+            if (c >= cols) {
+                c = 0;
+            }
+            triplets.push_back(T(rowOrder[r], colOrder[c], dist(gen)));
         }
-    }
-
-    for (uint i = 0; i < cells; ++i) {
-        if (occupied[i]) {
-            do {
-                data[i] = (double)rand() / RAND_MAX;
-            } while (data[i] <= EPSILON);
-
-            uint row = toRow(i);
-            uint col = toCol(i);
-            rows[row][col] = data[i];
-            cols[col][row] = data[i];
-        }
-    }
-}
-
-Matrix::Matrix(uint m, uint n, const dvector& nums) : numRows(m), numCols(n) {
-    uint cells = numRows * numCols;
-    if (nums.size() != cells) {
-        std::cout << "Constructor ERROR: nums vector wrong size" << std::endl
-                  << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    rows = dvector2(numRows, dvector(numCols, 0));
-    cols = dvector2(numCols, dvector(numRows, 0));
-    data = dvector(cells, 0);
-    occupied = bvector(cells, false);
-
-    for (uint i = 0; i < cells; ++i) {
-        if (fabs(nums[i]) > EPSILON) {  // Account for floating-point error
-            uint row = toRow(i);
-            uint col = toCol(i);
-            rows[row][col] = nums[i];
-            cols[col][row] = nums[i];
-            data[i] = nums[i];
-            occupied[i] = true;
-        }
-    }
-}
-
-Matrix Matrix::getSubmatrix(uivector rows, uivector cols) const {
-    checkRows(rows);
-    checkCols(cols);
-
-    uint n = rows.size();
-    uint m = cols.size();
-    dvector nums(m * n);
-
-    for (uint i = 0; i < n; ++i) {
-        for (uint j = 0; j < m; ++j) {
-            nums[i * n + j] = getCell(rows[i], cols[j]);
-        }
-    }
-
-    return std::move(Matrix(m, n, nums));
-}
-
-void Matrix::print() const {
-    for (const auto& row : rows) {
-        for (const auto& val : row) {
-            printf("%.3f ", val);
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-
-void Matrix::printOccupancy() const {
-    for (uint row = 0; row < numRows; ++row) {
-        for (uint col = 0; col < numCols; ++col) {
-            std::cout << (isOccupied(row, col) ? 1 : 0) << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-
-void Matrix::setCell(uint ind, double num) {
-    checkInd(ind);
-    uint row = toRow(ind);
-    uint col = toCol(ind);
-
-    if (num > EPSILON) {
-        data[ind] = num;
-        rows[row][col] = num;
-        cols[col][row] = num;
-        occupied[ind] = true;
     } else {
-        data[ind] = 0;
-        rows[row][col] = 0;
-        cols[col][row] = 0;
-        occupied[ind] = false;
+        for (unsigned r = 0, c = 0; c < cols; ++r, ++c) {
+            if (r >= rows) {
+                r = 0;
+            }
+            triplets.push_back(T(rowOrder[r], colOrder[c], dist(gen)));
+        }
     }
+
+    // Construct constraint matrix
+    matrix = SpMat(rows, cols);
+    matrix.setFromTriplets(triplets.begin(), triplets.end());
+
+    // Generate noisy indices (1-D) from sparsity probability
+    uivector noisyIndices;
+    for (unsigned i = 0; i < cells; ++i) {
+        if (dist(gen) < p) {
+            noisyIndices.push_back(i);
+        }
+    }
+
+    // Next, cycle through noisy 1-D indices, adding corresponding triplets
+    triplets.clear();
+    for (unsigned i : noisyIndices) {
+        triplets.push_back(T(toRow(i), toCol(i), dist(gen)));
+    }
+
+    // Construct sparsity noise matrix
+    SpMat sparsityMatrix(rows, cols);
+    sparsityMatrix.setFromTriplets(triplets.begin(), triplets.end());
+
+    // Add sparsity noise to constraint matrix
+    matrix += sparsityMatrix;
+
+    // Normalize columns of constraint matrix
+    for (unsigned c = 0; c < cols; ++c) {
+        matrix.col(c) /= matrix.col(c).norm();
+    }
+
+    b = matrix * DVec::Random(cols) + noise * DVec::Random(rows);
 }
 
-void Matrix::setCell(uint row, uint col, double num) {
-    checkRow(row);
-    checkCol(col);
-    uint ind = toInd(row, col);
-    setCell(ind, num);
-}
-
-void Matrix::setRow(uint row, const dvector& nums) {
-    checkRow(row);
-    if (nums.size() != getNumCols()) {
-        std::cout << "setRow ERROR: nums vector wrong size" << std::endl
-                  << std::endl;
+Matrix::Matrix(unsigned r, unsigned c, const std::vector<T> triplets, DVec b_)
+    : rows(r), cols(c), cells(r * c), b(b_) {
+    // Construct constraint matrix
+    matrix = SpMat(rows, cols);
+    matrix.setFromTriplets(triplets.begin(), triplets.end());
+    // Check vector b matches number of rows (m) of matrix
+    if (b.size() != rows) {
+        std::cout << "Matrix ERROR: b, rows size mismatch!\n" << std::endl;
         exit(EXIT_FAILURE);
     }
-
-    for (uint col = 0; col < getNumCols(); ++col) {
-        setCell(row, col, nums[col]);
-    }
 }
 
-void Matrix::setCol(uint col, const dvector& nums) {
-    checkCol(col);
-    if (nums.size() != getNumRows()) {
-        std::cout << "setCol ERROR: nums vector wrong size" << std::endl
-                  << std::endl;
-        exit(EXIT_FAILURE);
+Matrix Matrix::getSubmatrix(uivector rows_, uivector cols_) const {
+    checkRows(rows_);
+    checkCols(cols_);
+
+    DVec b_ = DVec(rows_.size());  // All b_i corresponding to indices in rows_
+    std::map<unsigned, unsigned> mapCols, mapRows;
+    for (unsigned i = 0; i < cols_.size(); ++i) {
+        mapCols[cols_[i]] = i;
+    }
+    for (unsigned i = 0; i < rows_.size(); ++i) {
+        mapRows[rows_[i]] = i;
+        b_(i) = b(rows_[i]);
     }
 
-    for (uint row = 0; row < getNumRows(); ++row) {
-        setCell(row, col, nums[row]);
+    std::vector<T> triplets;    // Values to insert into submatrix
+    for (unsigned c : cols_) {  // Iterate through columns in cols
+        for (SpMat::InnerIterator it(matrix, c); it;
+             ++it) {  // Iterate through rows in matrix
+            if (std::find(rows_.begin(), rows_.end(), it.row()) !=
+                rows_.end()) {
+                triplets.push_back(
+                    T(mapRows[it.row()], mapCols[c], it.value()));
+            }
+        }
     }
+
+    return std::move(Matrix(rows_.size(), cols_.size(), triplets, b_));
 }
 
-uint Matrix::checkInd(uint ind) const {
-    if (ind > getNumCells()) {
-        std::cout << "checkInd ERROR: ind exceeds number of cells" << std::endl
+DMat Matrix::getDenseSubmatrix(uivector rows_, uivector cols_) const {
+    checkRows(rows_);
+    checkCols(cols_);
+
+    std::map<unsigned, unsigned> mapCols, mapRows;
+    for (unsigned i = 0; i < cols_.size(); ++i) {
+        mapCols[cols_[i]] = i;
+    }
+    for (unsigned i = 0; i < rows_.size(); ++i) {
+        mapRows[rows_[i]] = i;
+    }
+
+    std::vector<T> triplets;    // Values to insert into submatrix
+    for (unsigned c : cols_) {  // Iterate through columns in cols
+        for (SpMat::InnerIterator it(matrix, c); it;
+             ++it) {  // Iterate through rows in matrix
+            if (std::find(rows_.begin(), rows_.end(), it.row()) !=
+                rows_.end()) {
+                triplets.push_back(
+                    T(mapRows[it.row()], mapCols[c], it.value()));
+            }
+        }
+    }
+
+    SpMat sparse(rows_.size(), cols_.size());
+    sparse.setFromTriplets(triplets.begin(), triplets.end());
+    return DMat(sparse);
+}
+
+unsigned Matrix::checkInd(unsigned ind) const {
+    if (ind > cells) {
+        std::cout << "checkInd ERROR: ind exceeds number of cells\n"
                   << std::endl;
         exit(EXIT_FAILURE);
     }
     return ind;
 }
 
-uint Matrix::checkRow(uint row) const {
-    if (row > getNumRows()) {
-        std::cout << "checkRow ERROR: row exceeds number of rows" << std::endl
+unsigned Matrix::checkRow(unsigned r) const {
+    if (r > rows) {
+        std::cout << "checkRow ERROR: row exceeds number of rows\n"
                   << std::endl;
         exit(EXIT_FAILURE);
     }
-    return row;
+    return r;
 }
 
-uint Matrix::checkCol(uint col) const {
-    if (col > getNumCols()) {
-        std::cout << "checkCol ERROR: col exceeds number of columns"
-                  << std::endl
+unsigned Matrix::checkCol(unsigned c) const {
+    if (c > cols) {
+        std::cout << "checkCol ERROR: col exceeds number of columns\n"
                   << std::endl;
         exit(EXIT_FAILURE);
     }
-    return col;
+    return c;
 }
 
-void Matrix::checkRows(std::vector<uint> rows) const {
-    for (auto& row : rows) {
-        checkRow(row);
+void Matrix::checkRows(uivector rows_) const {
+    for (unsigned r : rows_) {
+        checkRow(r);
     }
 }
 
-void Matrix::checkCols(std::vector<uint> cols) const {
-    for (auto& col : cols) {
-        checkCol(col);
+void Matrix::checkCols(uivector cols_) const {
+    for (unsigned c : cols_) {
+        checkCol(c);
     }
+}
+
+double Matrix::getCell(unsigned r, unsigned c) const {
+    checkRow(r);
+    checkCol(c);
+    return matrix.coeff(r, c);
+}
+
+double Matrix::getCell(unsigned ind) const {
+    checkInd(ind);
+    return matrix.coeff(toRow(ind), toCol(ind));
+}
+
+SpVec Matrix::getRow(unsigned r) const {
+    checkRow(r);
+    return matrix.row(r);
+}
+
+SpVec Matrix::getCol(unsigned c) const {
+    checkCol(c);
+    return matrix.col(c);
+}
+
+std::vector<T> Matrix::getTriplets() const {
+    std::vector<T> triplets;
+    for (unsigned i = 0; i < matrix.outerSize(); ++i) {
+        for (SpMat::InnerIterator it(matrix, i); it; ++it) {
+            triplets.push_back(T(it.row(), it.col(), it.value()));
+        }
+    }
+    return triplets;
+}
+
+void Matrix::setCell(unsigned r, unsigned c, double val) {
+    checkRow(r);
+    checkCol(c);
+    matrix.coeffRef(r, c) = val;
+    if (val < EPSILON && val > -EPSILON) {
+        matrix.prune(0.0);
+    }
+}
+
+void Matrix::clearCell(unsigned r, unsigned c) {
+    checkRow(r);
+    checkCol(c);
+    matrix.coeffRef(r, c) = 0;
+    matrix.prune(0.0);
+}
+
+bool Matrix::isOccupied(unsigned r, unsigned c) const {
+    checkRow(r);
+    checkCol(c);
+    for (SpMat::InnerIterator it(matrix, c); it; ++it) {
+        if (it.row() == r) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Matrix::printDense() const {
+    DMat dense(matrix);
+    Eigen::IOFormat clean(3, 0, ", ", "\n", "[", "]");
+    std::cout << "Printing " << rows << "x" << cols << " dense matrix: \n";
+    std::cout << dense.format(clean) << std::endl;
+}
+
+void Matrix::printSparse() const {
+    std::cout << "Printing " << rows << "x" << cols << " sparse matrix: \n";
+    for (unsigned i = 0; i < matrix.outerSize(); ++i) {
+        for (SpMat::InnerIterator it(matrix, i); it; ++it) {
+            std::cout << "( " << it.row() << ", \t" << it.col() << ", \t"
+                      << it.value() << " )\n";
+        }
+    }
+    std::cout << std::endl;
 }

@@ -1,22 +1,18 @@
 #include "matrix.hpp"
 
-const uint SIZE = 10;
-const uint M = 50;
-const uint N = 60;
+const unsigned SIZE = 10;
+const unsigned M = 15;
+const unsigned N = 20;
 const double P = 5 / (double)N;
 
 void testMatrix(Matrix* m) {
     bool isGood;
-
-    // std::cout << "Printing matrix occupancy..." << std::endl;
-    // m->printOccupancy();
-
     std::cout << "Checking each row for nonzero...\t";
     int badRow = -1;
-    for (uint row = 0; row < m->getNumRows(); ++row) {
+    for (unsigned row = 0; row < m->getRows(); ++row) {
         bool hasNonzero = false;
 
-        for (uint col = 0; col < m->getNumCols(); ++col) {
+        for (unsigned col = 0; col < m->getCols(); ++col) {
             if (m->isOccupied(row, col)) {
                 hasNonzero = true;
             }
@@ -35,10 +31,10 @@ void testMatrix(Matrix* m) {
 
     std::cout << "Checking each col for nonzero...\t";
     int badCol = -1;
-    for (uint col = 0; col < m->getNumCols(); ++col) {
+    for (unsigned col = 0; col < m->getCols(); ++col) {
         bool hasNonzero = false;
 
-        for (uint row = 0; row < m->getNumRows(); ++row) {
+        for (unsigned row = 0; row < m->getRows(); ++row) {
             if (m->isOccupied(row, col)) {
                 hasNonzero = true;
             }
@@ -58,60 +54,36 @@ void testMatrix(Matrix* m) {
     isGood = true;
     std::cout << "Testing set/get cell (value 0)...\t";
     m->setCell(0, 0, 0);
-    isGood = fabs(m->getCell(0)) <= EPSILON && !(m->isOccupied(0));
+    isGood = checkError(m->getCell(0, 0), 0) && !(m->isOccupied(0));
     std::cout << (isGood ? "OK" : "FAILED") << std::endl;
 
     isGood = true;
     std::cout << "Testing set/get cell (value 1)...\t";
     m->setCell(0, 1);
-    isGood = fabs(m->getCell(0, 0) - 1) <= EPSILON && m->isOccupied(0, 0);
+    isGood =
+        checkError(m->getCell(0, 0) - 1, 0) < EPSILON && m->isOccupied(0, 0);
     std::cout << (isGood ? "OK" : "FAILED") << std::endl;
 
-    isGood = true;
-    std::cout << "Testing set/get row...\t\t\t";
-    dvector row1 = dvector(m->getNumCols(), 1);
-    m->setRow(0, row1);
-    dvector row2 = m->getRow(0);
-    for (uint i = 0; i < row2.size(); ++i) {
-        if (fabs(row1[i] - row2[i]) > EPSILON ||
-            fabs(m->getCell(0, i) - row2[i]) > EPSILON ||
-            !(m->isOccupied(0, i))) {
-            isGood = false;
-            break;
-        }
-    }
-    std::cout << (isGood ? "OK" : "FAILED") << std::endl;
+    // std::cout << "Testing get row...\n";
+    // std::cout << "Row 0: \n" << DVec(m->getRow(0)) << "\n";
 
-    isGood = true;
-    std::cout << "Testing set/get col...\t\t\t";
-    dvector col1 = dvector(m->getNumRows(), 1);
-    m->setCol(0, col1);
-    dvector col2 = m->getCol(0);
-    for (uint i = 0; i < col2.size(); ++i) {
-        if (fabs(col1[i] - col2[i]) > EPSILON ||
-            fabs(m->getCell(i, 0) - col2[i]) > EPSILON ||
-            !(m->isOccupied(i, 0))) {
-            isGood = false;
-            break;
-        }
-    }
-    std::cout << (isGood ? "OK" : "FAILED") << std::endl;
+    // std::cout << "Testing get col...\n";
+    // std::cout << "Col 0: \n" << DVec(m->getCol(0)) << "\n";
 
     isGood = true;
     std::cout << "Testing submatrix...\t\t\t";
     uivector rows;
-    for (int i = (int)sqrt(m->getNumRows()) - 1; i >= 0; --i) {
-        rows.push_back(rand() % m->getNumRows());
+    for (int i = (int)sqrt(m->getRows()) - 1; i >= 0; --i) {
+        rows.push_back(rand() % m->getRows());
     }
     uivector cols;
-    for (int i = (int)sqrt(m->getNumCols()) - 1; i >= 0; --i) {
-        cols.push_back(rand() % m->getNumCols());
+    for (int i = (int)sqrt(m->getCols()) - 1; i >= 0; --i) {
+        cols.push_back(rand() % m->getCols());
     }
     Matrix sub = m->getSubmatrix(rows, cols);
-    for (uint i = 0; i < rows.size(); ++i) {
-        for (uint j = 0; j < cols.size(); ++j) {
-            if (fabs(sub.getCell(i, j) - m->getCell(rows[i], cols[j])) >
-                    EPSILON ||
+    for (unsigned i = 0; i < rows.size(); ++i) {
+        for (unsigned j = 0; j < cols.size(); ++j) {
+            if (!checkError(sub.getCell(i, j), m->getCell(rows[i], cols[j])) ||
                 sub.isOccupied(i, j) != m->isOccupied(rows[i], cols[j])) {
                 isGood = false;
                 break;
@@ -120,8 +92,14 @@ void testMatrix(Matrix* m) {
     }
     std::cout << (isGood ? "OK" : "FAILED") << std::endl;
 
-    // std::cout << "Printing submatrix..." << std::endl;
-    // sub.print();
+    std::cout << "Printing submatrix..." << std::endl;
+    sub.printDense();
+
+    std::cout << "Printing matrix..." << std::endl;
+    m->printDense();
+
+    std::cout << "Printing matrix occupancy..." << std::endl;
+    m->printSparse();
 
     std::cout << std::endl << std::endl;
 }
@@ -131,8 +109,8 @@ int main() {
     Matrix* mSize = new Matrix(SIZE);
     Matrix* mMN = new Matrix(M, N, P);
 
-    std::cout << "Testing default matrix..." << std::endl << std::endl;
-    testMatrix(mDefault);
+    // std::cout << "Testing default matrix..." << std::endl << std::endl;
+    // testMatrix(mDefault);
     std::cout << "Testing size " << SIZE << " matrix..." << std::endl
               << std::endl;
     testMatrix(mSize);

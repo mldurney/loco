@@ -2,13 +2,13 @@
 
 int main() {
     Matrix matrix;
-    Solution s = loco(matrix);
+    MatrixSolution s = solve(matrix);
 
-    // std::cout << "Printing matrix..." << std::endl;
-    // matrix.print();
+    //std::cout << "Printing matrix...\n";
+    //matrix.printDense();
 
     std::cout << "Solution: [ ";
-    for (auto& xi : s.x) {
+    for (auto& xi : s.primals) {
         std::cout << xi << " ";
     }
     std::cout << "]" << std::endl;
