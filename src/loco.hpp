@@ -2,33 +2,34 @@
 #define LOCO_HPP
 
 // Includes
-#include <unsupported/Eigen/autodiff>
+#include <functional>
 #include "matrix.hpp"
 
 // Typedefs and constants
 typedef std::vector<double> dvector;
-typedef double (*fun)(double);  // Type for problem constraint functions
+typedef std::function<double(double)> fun;  // Problem constraint function type
 typedef std::vector<fun> fvector;
 // Type for online algorithms
-typedef DVec (*online)(const Matrix&, const fvector&, double);
+typedef DVec(*online)(const Matrix&, const fvector&, double);
 typedef struct {
-    double primal;
-    unsigned messages;
+	double primal;
+	unsigned messages;
 } LocoSolution;  // Solution from local problem for primal variable x_k
 typedef struct {
-    dvector primals;
-    unsigned messages;
+	dvector primals;
+	unsigned messages;
 } MatrixSolution;  // Solution for all primal variables of matrix
-const double CHANGE = 1e-6;
+const double CHANGE = 1e-3;
 
 MatrixSolution solve(online alg, const Matrix& matrix, const fvector& funs,
-                     dvector ranks = dvector());
+					 dvector ranks = dvector());
 LocoSolution loco(online alg, const Matrix& matrix, const fvector& funs,
-                  const dvector& ranks, unsigned ind);
+				  const dvector& ranks, unsigned ind);
 dvector generateRanks(unsigned num);
 unsigned maxRank(const SpVec& x, const dvector& ranks);
-fvector restrictFunction(const fvector& unrestricted, uivector y);
+fvector restrictFunctions(const fvector& unrestricted, uivector y);
 inline double derive(const fun& f, double x, double h = CHANGE);
+inline double dot(DVec& a, DVec& b);
 DVec onlineFractional(const Matrix& matrix, const fvector& funs, double delta);
 
 #endif  // LOCO_HPP
